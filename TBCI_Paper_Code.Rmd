@@ -1,0 +1,578 @@
+---
+title: "Code for TBCI Paper"
+author: "Marie-Therese Meye, Hannah Reitz"
+date: "23 January 2022"
+output: html_document
+---
+
+## Packages
+```{r include=FALSE}
+pacman::p_load(
+  tidyverse,
+  knitr,
+  kableExtra,
+  readr,
+  haven,
+  stargazer,
+  ggplot2,
+  tableone,
+  psych, 
+  performance,
+  scales,
+  MatchIt,
+  optmatch,
+  cobalt,
+  lmtest,
+  sandwich,
+  rgenoud,
+  DescTools,
+  jtools,
+  ggplot2,
+  ggthemes
+)
+
+```
+
+
+## Loading Afrobarometer data Kenya round 8
+```{r}
+# Set working directory
+setwd("G:\\My Drive\\HWS21\\Theory_Building_and_Causal_Inference\\Paper\\Code")
+
+# Load data
+data <- haven::read_sav("ken_r8.data_.new_.final_.wtd_release.31mar21.sav")
+data
+
+```
+
+
+## Data Preparation
+
+```{r}
+# Renaming variables
+data <- data %>%
+  rename(violence = Q17D,
+         elec = Q24,
+         gender = Q101,
+         age = Q1,
+         food = Q7A,
+         water = Q7B,
+         medi = Q7C,
+         fuel = Q7D,
+         cash = Q7E,
+         educ = Q97,
+         rural = URBRUR,
+         ethnic = Q81,
+         party = Q91B, 
+         id = RESPNO
+         )
+
+
+# Selecting all needed variables
+data <- data %>%
+  dplyr::select(id, violence, elec, gender, age, food, water, medi, fuel, cash, educ, rural, ethnic, party)
+
+```                
+
+
+## Deleting cases with missing values
+
+```{r}
+# Saving all factor variables as factors
+str(data$violence)
+data$violence <- factor(data$violence, ordered = TRUE)
+
+str(data$elec)
+data$elec <- factor(data$elec, ordered = TRUE)
+
+str(data$gender)
+data$gender <- factor(data$gender)
+
+str(data$rural)
+data$rural <- factor(data$rural)
+
+str(data$food)
+data$food <- factor(data$food, ordered = TRUE)
+summary(data$food)
+
+str(data$water)
+data$water <- factor(data$water, ordered = TRUE)
+summary(data$water)
+
+str(data$medi)
+data$medi <- factor(data$medi, ordered = TRUE)
+summary(data$medi)
+
+str(data$fuel)
+data$fuel <- factor(data$fuel, ordered = TRUE)
+summary(data$fuel)
+
+str(data$cash)
+data$cash <- factor(data$cash, ordered = TRUE)
+summary(data$cash)
+
+str(data$educ)
+data$educ <- factor(data$educ, ordered = TRUE)
+summary(data$educ)
+
+str(data$ethnic)
+data$ethnic <- factor(data$ethnic)
+summary(data$ethnic)
+
+str(data$party)
+data$party <- factor(data$party)
+summary(data$party)
+
+  
+summary(data)
+
+
+# Setting missings
+
+table(data$violence)
+data$violence[data$violence == 9] <- NA
+data$violence[data$violence == 8] <- NA
+
+table(data$elec)
+data$elec[data$elec == 5] <- NA
+data$elec[data$elec == 9] <- NA
+
+table(data$age)
+data$age[data$age == -1] <- NA
+data$age[data$age == 998] <- NA
+data$age[data$age == 999] <- NA
+
+
+table(data$water)
+data$water[data$water == 8] <- NA
+
+table(data$medi)
+data$medi[data$medi == 9] <- NA
+
+table(data$fuel)
+data$fuel[data$fuel == 8] <- NA
+data$fuel[data$fuel == 9] <- NA
+
+table(data$cash)
+data$cash[data$cash == 9] <- NA
+
+table(data$educ)
+data$educ[data$educ == 98] <- NA
+
+table(data$party)
+data$party[data$party == -1] <- NA
+data$party[data$party == 9998] <- NA
+data$party[data$party == 9999] <- NA
+
+table(data$ethnic)
+data$ethnic[data$ethnic == 9998] <- NA
+data$ethnic[data$ethnic == 9999] <- NA
+
+
+# Deleting all observations that have missing values on any of the variables
+data <- na.omit(data)
+
+summary(data)
+
+
+# Dropping unnecessary levels of factor variables
+data$violence <- droplevels(data$violence)
+data$elec <- droplevels(data$elec)
+data$water <- droplevels(data$water)
+data$medi <- droplevels(data$medi)
+data$fuel <- droplevels(data$fuel)
+data$cash <- droplevels(data$cash)
+data$water <- droplevels(data$water)
+data$educ <- droplevels(data$educ)
+data$ethnic <- droplevels(data$ethnic)
+data$party <- droplevels(data$party)
+
+
+summary(data)
+
+```
+
+
+## Recoding Variables
+
+```{r}
+
+# Binary violence variable / Treatment variable
+table(data$violence)
+data$treat <- ifelse(data$violence == '3', 0, 1)
+data$treat <- as.factor(data$treat) # 0 = no fear of violence, 1 = fear of violence 
+table(data$treat)
+
+# Elections attitudes
+data$elec <- recode_factor(data$elec, '1' = "0", '2' = "0", '3' = "1", '4' = "1") 
+
+# Gender
+data$gender <- ifelse(data$gender == '1', 0, 1)
+data$gender <- as.factor(data$gender) # 0 = male, 1 = female
+summary(data$gender)
+
+# Education
+table(data$educ)
+data$educ <- recode_factor(data$educ, '0' = "0", '1' = "0", '2' = "1", '3' = "1", '4' = "2", '5' = "2", '6' = "3", '7' = "4", '8' = "4", '9' = "4") 
+# 0 = No formal schooling, 1 = primary schooling, 2 = secondary schooling, 3 = post-secondary schooling, 4 = university
+table(data$educ)
+
+# Rural
+data$rural <- recode_factor(data$rural, "1" = "0", "2" = "1") # 0 = urban, 1 = rural
+table(data$rural)
+
+
+# Ethnic tribe
+table(data$ethnic)
+data$ethnic <- recode_factor(data$ethnic, '302' = "0", '300' = "1", '301' = "2", '303' = "3", '304' = "4", '305' = "5", '306' = "5", '307' = "5", '308' = "5", '309' = "5", '310' = "5", '311' = "5", '312' = "5", '313' = "5", '314' = "5", '315' = "5", '316' = "5",'9990' = "5", '9995' = "5", '4' = "5") 
+# 0 = Luhya, 1 = Kikuyu, 2 = Luo, 3 = Kamba, 4 = Kalenjin, 5 = Other
+table(data$ethnic)
+
+# Partisanship
+table(data$party)
+data$party <- recode_factor(data$party, '305' = "0", '300' = "1", '301' = "1", '302' = "1", '303' = "1", '304' = "1", '306' = "1", '307' = "1", '308' = "1", '309' = "1", '310' = "1", '311' = "1", '312' = "1", '313' = "1", '9995' = "1", '9997' = "2") 
+# 0 = incumbent/government, 1 = oppostion, 2 = non-partisan
+table(data$party)
+
+summary(data)
+
+```
+
+
+## Lived poverty index reliability and creation
+
+```{r}
+
+# Converting lived poverty items to numeric
+data$food <- as.numeric(data$food)
+data$water <- as.numeric(data$water)
+data$medi <- as.numeric(data$medi)
+data$fuel <- as.numeric(data$fuel)
+data$cash <- as.numeric(data$cash)
+
+# Cronbach's alpha for lived poverty items
+psych::alpha(subset(data, select = c(food, water, medi, fuel, cash)), check.keys = TRUE)
+
+# Generating lived poverty index  
+data <- data %>% 
+  mutate(pov = (food + water + medi + fuel + cash) / 5)
+
+summary(data)
+
+# Deleting items for index
+data <- subset(data, select = -c(food, water, medi, fuel, cash))
+
+```
+
+
+## Descriptive Statistics
+
+```{r, echo = TRUE, include=TRUE}
+
+attach(data)
+
+myVars <- c("treat", "elec", "gender", "age", "educ", "rural", "pov", "ethnic", "party")
+
+catVars <- c("treat", "elec", "gender", "educ", "rural", "ethnic", "party")
+
+# Table of descriptive statistics
+desctab <- CreateTableOne(vars = myVars, data = data, factorVars = catVars)
+desctab
+desc <- print(desctab, showAllLevels = TRUE, formatOptions = list(big.mark = ","), noSpaces = TRUE, catDigits = 2)
+
+# Exporting table to Excel
+write.csv(desc, file = "desc.csv")
+
+```
+
+
+## Regression without prior matching
+
+```{r}
+# Bivariate logistic regression of treatment on outcome
+regwm1 <- glm(elec ~ treat, family=binomial(link="logit"), data = data)
+summary(regwm1)
+stargazer(regwm1, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Odd ratios
+exp(coefficients(regwm1))
+
+
+# Logistic regression with covariates
+regwm2 <- glm(elec ~ treat + gender + age + educ + rural + pov + ethnic + party, family=binomial(link="logit"), data = data)
+summary(regwm2)
+stargazer(regwm2, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Odd ratios
+exp(coefficients(regwm2))
+
+```
+
+
+## Exporting regression table
+
+```{r}
+stargazer(regwm1, regwm2, 
+          align = TRUE, 
+          title = "Results of logistic regressions estimating the effect of fear of electoral violence on attitudes towards democratic elections",
+          dep.var.labels=c("Attitudes towards deomcratic elections","Attitudes towards deomcratic elections"),
+          covariate.labels=c("Fear of electoral violence", "Female","Age","Primary schooling", "Secondary schooling", "Post-secondary schooling", "University schooling", "Rural", "Poverty level", "Kikuyu", "Luo",  "Kamba", "Kalenjin", "Other", "Opposition", "Non-partisan"),
+          no.space=TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001),
+          type = "latex")
+
+```
+
+
+
+## Generating and exporting coefficient plot
+
+```{r}
+
+coefplot1 <- plot_summs(regwm1, regwm2, scale = TRUE, colors = c("red", "blue"), 
+           panel.border = "black",
+           coefs = c("Fear of electoral viol." = "treat",
+                     "Female" = "gender", "Age" = "age",
+                     "Educ.: Primary" = "educ1", "Educ.: Secondary" = "educ2",
+                     "Educ.: Post-secondary" = "educ3", "Educ.: University" = "educ4", 
+                     "Rural" = "rural", "Poverty level" = "pov",
+                     "Ethnic: Kikuyu" = "ethnic1", "Ethnic: Luo" = "ethnic2",
+                     "Ethnic: Kamba" = "ethnic3", "Ethnic: Kalenjin" = "ethnic4", 
+                     "Ethnic: Other" = "ethnic5", "Partisans.: Opposition" = "party1", 
+                     "Partisans.: Non-partisan" = "party2")
+           )
+
+pdf(file = "Coefplot1.pdf",
+    width = 7, 
+    height = 4)
+
+coefplot1 <- coefplot1 + theme_apa()  + labs(y = NULL) + theme(panel.grid.major.x=element_line(colour = "grey80"), axis.text.y = element_text(colour="black"), axis.text.x = element_text(colour="black")) + geom_vline(xintercept = 0, color = "black") + scale_x_continuous(breaks = seq(-1.5,0.5,by = 0.5)) + coord_cartesian(xlim = c(-1.5,1))
+
+coefplot1
+
+dev.off()
+
+```
+
+
+## Perform matching and selecting matching method
+
+```{r}
+
+# Selected matching method with the best balance
+m_out1 <- matchit(
+  treat ~gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "genetic",
+  mahvars = ~ gender + age + educ + rural + pov + ethnic + party,
+  caliper = c(.05, pov = 0.2),
+  std.caliper = c(TRUE, FALSE),
+  pop.size = 500,
+  replace = TRUE,
+  ratio = 1)
+m_out1
+
+
+
+# Other matching methods we tried
+m_out2 <- MatchIt::matchit(
+  treat ~ gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "full",
+  distance = "mahalanobis",
+  ratio = 1,
+  replace = TRUE
+)
+m_out2
+
+m_out3 <- MatchIt::matchit(
+  treat ~ gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "nearest",
+  distance = "mahalanobis",
+  ratio = 1,
+  replace = TRUE
+)
+m_out3
+
+
+m_out4 <- MatchIt::matchit(
+  treat ~ gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "genetic",
+  distance = "mahalanobis",
+  ratio = 1,
+  replace = TRUE,
+  pop.size = 100
+)
+m_out4
+
+
+m_out5 <- MatchIt::matchit(
+  treat ~ gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "nearest",
+  distance = "logit",
+  ratio = 1, 
+  replace = TRUE
+)
+m_out5
+
+m_out6 <- MatchIt::matchit(
+  treat ~ gender + age + educ + rural + pov + ethnic + party,
+  data = data,
+  method = "optimal",
+  distance = "mahalanobis",
+  ratio = 1, 
+)
+m_out6
+
+```
+
+## Generating and exporting balance plot
+```{r}
+# Vector for variable names
+names <- c(age = "Age",
+           gender = "Female",
+           educ_0 = "Educ.: No formal schooling",
+           educ_1 = "Educ.: Primary",
+           educ_2 = "Educ.: Secondary",
+           educ_3 = "Educ.: Post-secondary",
+           educ_4 = "Educ.: University",
+           rural = "Rural",
+           ethnic_0 = "Ethnic: Luhya",
+           ethnic_1 = "Ethnic: Kikuyu",
+           ethnic_2 = "Ethnic: Luo",
+           ethnic_3 = "Ethnic: Kamba",
+           ethnic_4 = "Ethnic: Kalenjin",
+           ethnic_5 = "Ethnic: Other",
+           party_0 = "Partisans.: Incumbent",
+           party_1 = "Partisans.: Opposition",
+           party_2 = "Partisans.: Non-partisan",
+           pov = "Poverty level"
+            )
+
+pdf(file = "Balance.pdf", 
+    width = 7,
+    height = 4)
+
+cobalt::love.plot(m_out1, 
+                  var.order = "unadjusted",
+                  drop.distance = TRUE,
+                  #abs = TRUE,
+                  var.names = names,
+                  line = TRUE,
+                  thresholds = c(m = .1),
+                  binary = "std",
+                  colors = c("red", "blue"),
+                  sample.names = c("Unweighted", "Weighted")
+                  )
+
+dev.off()
+
+```
+
+
+## Check balance
+```{r}
+
+m_out1_sum <- summary(m_out1)
+m_out1_sum
+
+```
+
+
+## Generating matched data set
+```{r}
+
+data_matched <- get_matches(m_out1)
+head(data_matched)
+
+```
+
+
+## Regression with matched data
+```{r}
+# Saving weights as integers
+data_matched$weights <- as.integer(data_matched$weights)
+
+# Bivariate logistic regression with matched data
+regm1 <- glm(elec ~ treat, family=quasibinomial(link="logit"),
+data = data_matched,
+weights = weights
+)
+stargazer(regm1, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Adjustment of standard errors to clustering in pairs and multiple use of control units
+regclus1 <- lmtest::coeftest(regm1, vcov. = vcovCL, cluster = ~ subclass + id)
+stargazer(regclus1, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Odd ratios
+exp(coefficients(regclus1))
+
+
+
+# Logistic regression with matched data and covariates
+regm2 <- glm(elec ~ treat + gender + age + educ + rural + pov + ethnic + party, family=quasibinomial(link="logit"),
+data = data_matched,
+weights = weights
+)
+summary(regm2)
+stargazer(regm2, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Adjustment of standard errors to clustering in pairs and multiple use of control units
+regclus2 <- lmtest::coeftest(regm2, vcov. = vcovCL, cluster = ~ subclass + id)
+stargazer(regclus2, type = "text", star.cutoffs = c(0.05, 0.01, 0.001))
+
+# Odd ratios
+exp(coefficients(regclus2))
+
+```
+
+## Exporting regression table
+
+```{r}
+
+stargazer(regclus1, regclus2, 
+          align = TRUE, 
+          title = "Results of logistic regressions estimating the effect of fear of electoral violence on attitudes towards democratic elections after matching on covariates",
+          dep.var.labels=c("Attitudes towards deomcratic elections","Attitudes towards deomcratic elections"),
+          covariate.labels=c("Fear of electoral violence", "Female","Age","Primary schooling", "Secondary schooling", "Post-secondary schooling", "University schooling", "Rural", "Poverty level", "Kikuyu", "Luo",  "Kamba", "Kalenjin", "Other", "Opposition", "Non-partisan"),
+          no.space=TRUE,
+          star.cutoffs = c(0.05, 0.01, 0.001),
+          type = "latex")
+
+```
+
+
+## Generating and exporting coefficient plot
+
+```{r}
+coefplot2 <- plot_summs(regclus1, regclus2, scale = TRUE, colors = c("red", "blue"), 
+           panel.border = "black",
+           coefs = c("Fear of electoral viol." = "treat1",
+                     "Female" = "gender", "Age" = "age",
+                     "Educ.: Primary" = "educ1", "Educ.: Secondary" = "educ2",
+                     "Educ.: Post-secondary" = "educ3", "Educ.: University" = "educ4", 
+                     "Rural" = "rural", "Poverty level" = "pov",
+                     "Ethnic: Kikuyu" = "ethnic1", "Ethnic: Luo" = "ethnic2",
+                     "Ethnic: Kamba" = "ethnic3", "Ethnic: Kalenjin" = "ethnic4", 
+                     "Ethnic: Other" = "ethnic5", "Partisans.: Opposition" = "party1", 
+                     "Partisans.: Non-partisan" = "party2"
+           ))
+
+coefplot2
+
+
+pdf(file = "Coefplot2.pdf", 
+    width = 7,
+    height = 4)
+
+coefplot2 <- coefplot2 + theme_apa()  + labs(y = NULL) + theme(panel.grid.major.x=element_line(colour = "grey80"), axis.text.y = element_text(colour="black"), axis.text.x = element_text(colour="black")) + geom_vline(xintercept = 0, color = "black")
+
+coefplot2
+
+dev.off()
+
+```
+
